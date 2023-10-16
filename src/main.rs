@@ -1,12 +1,15 @@
 mod chip8;
 mod constants;
+mod sleep;
+
 use crate::chip8::Chip8;
 use crate::constants::*;
+use crate::sleep::Sleeper;
+use winit::event::VirtualKeyCode;
 
 use clap::Parser;
 use log::{debug, info};
 use pixels::{Error, Pixels, SurfaceTexture};
-use std::time::Instant;
 use winit::{
     dpi::LogicalSize,
     event::{ElementState, Event, WindowEvent},
@@ -19,13 +22,22 @@ use winit::{
 struct Args {
     #[arg(long)]
     binary: String,
+    #[arg(long, default_value_t = 2)]
+    scale: u32,
 }
 
+
+
 fn main() -> Result<(), Error> {
-    let args = Args::parse();
-    let binary = args.binary;
     env_logger::init();
-    info!("Starting Chip8 interpreter with binary {}", binary);
+    let args = Args::parse();
+    let binary = args.binary.as_str();
+    let scale = args.scale;
+    info!(
+        "Starting Chip8 interpreter with binary {} and scale {}",
+        binary, scale
+    );
+
     let event_loop = EventLoop::new();
     let window = {
         let size = LogicalSize::new(
@@ -46,16 +58,19 @@ fn main() -> Result<(), Error> {
         Pixels::new(CHIP8_WIDTH as u32, CHIP8_HEIGHT as u32, surface_texture).unwrap()
     };
 
-    let mut chip8 = Chip8::new(pixels, binary.as_str());
+    let mut chip8 = Chip8::new(pixels)
+        .load_binary(binary)
+        .unwrap_or_else(|_| panic!("Could not load binary {}", binary));
+
+    let instruction_duty_cycle = chip8.time_per_insn();
+    let mut sleeper = Sleeper::new(instruction_duty_cycle);
 
     event_loop.run(move |event, _, control_flow| {
-        let start: Instant = Instant::now();
-
         control_flow.set_poll();
         match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
-                    debug!("Exiting");
+                    info!("Exiting");
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
@@ -66,6 +81,11 @@ fn main() -> Result<(), Error> {
                 }
                 WindowEvent::KeyboardInput { input, .. } => {
                     let scancode = input.virtual_keycode.expect("Invalid keycode.");
+                    if scancode == VirtualKeyCode::Escape {
+                        info!("Exiting");
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
                     if chip8.keyboard_map.contains_key(&scancode) {
                         let key = chip8.keyboard_map[&scancode];
                         let previously_pressed = chip8.keypad[key as usize];
@@ -80,6 +100,7 @@ fn main() -> Result<(), Error> {
                             "Updating keypad {}({:?}) to {}",
                             key, scancode, just_pressed
                         );
+                        window.request_redraw();
                     }
                 }
                 _ => (),
@@ -90,11 +111,7 @@ fn main() -> Result<(), Error> {
             }
             _ => (),
         }
-        chip8.cycle();
-        let fps = 1000.0 / (start.elapsed().as_millis() as f64);
-        if fps < 80.0 {
-            debug!("WTF");
-        }
-        debug!("Current FPS: {}", fps);
+        chip8.step();
+        sleeper.sleep();
     });
 }

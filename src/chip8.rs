@@ -1,8 +1,7 @@
-use log::debug;
+use log::{debug, trace};
 use pixels::Pixels;
 use rand::Rng;
 use std::collections::HashMap;
-use std::thread;
 use std::time::{Duration, Instant};
 use winit::event::VirtualKeyCode;
 
@@ -31,6 +30,9 @@ pub struct Chip8 {
     pub keyboard_map: HashMap<VirtualKeyCode, u32>,
     pub keypad: [bool; 16],
     pub key_pressed: Option<u32>,
+    pub cycle_count: u32,
+    hz: u32,
+    timer: Instant,
 }
 
 type Reg = u8;
@@ -77,7 +79,7 @@ pub enum Instruction {
 
 use Instruction::*;
 impl Chip8 {
-    pub fn new(pixels: Pixels, path: &str) -> Chip8 {
+    pub fn new(pixels: Pixels) -> Chip8 {
         let keyboard_map = HashMap::from([
             (VirtualKeyCode::Key1, 1),
             (VirtualKeyCode::Key2, 2),
@@ -110,12 +112,16 @@ impl Chip8 {
             keyboard_map,
             keypad: [false; 16],
             key_pressed: None,
+            cycle_count: 0,
+            hz: CHIP8_SPEED_HZ,
+            timer: Instant::now(),
         };
-        // Load binary from address 0x200
         chip.load_fonts();
-        chip.load_binary(path, chip.pc)
-            .expect("Error while loading {path}.");
         chip
+    }
+
+    pub fn time_per_insn(&self) -> Duration {
+        Duration::from_secs_f64(1.0 / self.hz as f64)
     }
 
     fn load_fonts(&mut self) {
@@ -151,26 +157,27 @@ impl Chip8 {
             .expect("Could not resize window");
     }
 
-    pub fn load_binary(&mut self, binary: &str, start_address: u16) -> std::io::Result<()> {
-        debug!("Loading binary {binary} at start address {start_address}");
+    pub fn load_binary(mut self, binary: &str) -> std::io::Result<Self> {
+        debug!("Loading binary {binary}.");
         let buffer = std::fs::read(binary)?;
-        let target_address = start_address as usize;
-        self.memory[target_address..(buffer.len() + target_address)].copy_from_slice(&buffer[..]);
-        Ok(())
+        let start_address = 0x200;
+        self.memory[start_address..(start_address + buffer.len())].copy_from_slice(&buffer[..]);
+        Ok(self)
     }
 
-    pub fn fetch(&mut self) -> u16 {
+    fn fetch(&mut self) -> u16 {
         let pc = self.pc as usize;
         let instruction: u16 = u16::from_be_bytes([self.memory[pc], self.memory[pc + 1]]);
-        debug!(
+        trace!(
             "Fetched instruction {:#06x} from address {}.",
-            instruction, self.pc,
+            instruction,
+            self.pc,
         );
         self.pc += 2;
         instruction
     }
 
-    pub fn decode(&self, instruction: u16) -> Instruction {
+    fn decode(&self, instruction: u16) -> Instruction {
         let decoded_insn = match nibbles(instruction) {
             (0, 0, 0xE, 0) => Clear,
             (0, 0, 0xE, 0xE) => Return,
@@ -235,11 +242,11 @@ impl Chip8 {
             (0xF, x, 6, 5) => LoadRegs(x),
             (_, _, _, _) => Nop,
         };
-        debug!("Decoded instruction {:?}", decoded_insn);
+        trace!("Decoded instruction {:?}", decoded_insn);
         decoded_insn
     }
 
-    pub fn execute(&mut self, insn: Instruction) {
+    fn execute(&mut self, insn: Instruction) {
         match insn {
             Nop => (),
 
@@ -443,14 +450,14 @@ impl Chip8 {
 
                 // sprites are always 8-bit wide
                 let sprite_len = 8;
-                for j in 0..no_lines {
+                for (j, line) in sprite.iter().enumerate().take(no_lines) {
                     let yoff = ((y + j) % CHIP8_HEIGHT) * CHIP8_WIDTH;
                     for i in 0..sprite_len {
                         let xoff = (x + i) % CHIP8_WIDTH;
                         let pixel_coord = (xoff + yoff) * 4;
                         // fb format is RGBA, so convert it to monochrome (0->0, 255->1)
                         let old_value = if fb[pixel_coord] == 255 { 1 } else { 0 };
-                        let sprite_value = (sprite[j] >> (sprite_len - 1 - i)) & 0x1;
+                        let sprite_value = (line >> (sprite_len - 1 - i)) & 0x1;
                         let mut new_val = sprite_value ^ old_value;
                         // Convert back to RGBA
                         if new_val == 1 {
@@ -471,26 +478,25 @@ impl Chip8 {
         }
         // Clear any key-presses
         self.key_pressed = None;
-        // Update timers
-        if self.delay_timer > 0 {
-            self.delay_timer -= 1;
-        }
-        if self.sound_timer > 0 {
-            self.sound_timer -= 1;
-        }
-        debug!("Executed instruction {:?}", insn);
+        trace!("Executed instruction {:?}", insn);
     }
 
-    pub fn cycle(&mut self) {
-        let start = Instant::now();
-        let time_limit = Duration::from_micros(1500);
-        let insn = self.fetch();
-        let decoded_insn: Instruction = self.decode(insn);
+    pub fn step(&mut self) {
+        let current_insn = self.fetch();
+        let decoded_insn: Instruction = self.decode(current_insn);
         self.execute(decoded_insn);
-        let time_elapsed = start.elapsed();
-        if time_elapsed < time_limit {
-            thread::sleep(time_limit - time_elapsed);
-            debug!("Slept for {}ms", (time_limit - time_elapsed).as_millis());
+        self.cycle_count = self.cycle_count.wrapping_add(1);
+
+        // Counters are updated at a frequency of 1/60th second.
+        if self.cycle_count % (self.hz/60) == 0 {
+            self.delay_timer = self.delay_timer.saturating_sub(1);
+            self.sound_timer = self.sound_timer.saturating_sub(1);
+        }
+        if (self.cycle_count % IPS_MEASURE_CYCLE) == 0 {
+            // Divide by ms instead of s to get more accuracy so multiply by 1000.
+            let ips = 1000 * IPS_MEASURE_CYCLE as u128 / self.timer.elapsed().as_millis();
+            debug!("IPS is {}. Cycle count is {}", ips, self.cycle_count);
+            self.timer = Instant::now();
         }
     }
 }

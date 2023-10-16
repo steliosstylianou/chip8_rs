@@ -8,7 +8,6 @@
             "type": "lldb",
             "request": "launch",
             "name": "Debug executable 'practise'",
-            "env": {"RUST_LOG": "debug"},
             "cargo": {
                 "args": [
                     "build",
@@ -20,8 +19,9 @@
                     "kind": "bin"
                 }
             },
-            "args": ["--binary", "~/Downloads/pong.rom"],
-            "cwd": "${workspaceFolder}"
+            "args": ["--binary", "/Users/stelioss/Downloads/chip8-test-suite/bin/6-keypad.ch8"],
+            "cwd": "${workspaceFolder}",
+            "env": {"RUST_LOG": "practise=info"}
         },
         {
             "type": "lldb",
