@@ -7,35 +7,35 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'practise'",
+            "name": "Debug executable 'chip8'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=practise",
-                    "--package=practise"
+                    "--bin=chip8",
+                    "--package=chip8"
                 ],
                 "filter": {
-                    "name": "practise",
+                    "name": "chip8",
                     "kind": "bin"
                 }
             },
             "args": ["--binary", "/Users/stelioss/Downloads/chip8-test-suite/bin/6-keypad.ch8"],
             "cwd": "${workspaceFolder}",
-            "env": {"RUST_LOG": "practise=info"}
+            "env": {"RUST_LOG": "chip8=info"}
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'practise'",
+            "name": "Debug unit tests in executable 'chip8'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=practise",
-                    "--package=practise"
+                    "--bin=chip8",
+                    "--package=chip8"
                 ],
                 "filter": {
-                    "name": "practise",
+                    "name": "chip8",
                     "kind": "bin"
                 }
             },

@@ -1,10 +1,6 @@
 mod chip8;
-mod constants;
-mod sleep;
-
-use crate::chip8::Chip8;
-use crate::constants::*;
-use crate::sleep::Sleeper;
+use chip8::constants::*;
+use chip8::Interpreter;
 use winit::event::VirtualKeyCode;
 
 use clap::Parser;
@@ -25,8 +21,6 @@ struct Args {
     #[arg(long, default_value_t = 2)]
     scale: u32,
 }
-
-
 
 fn main() -> Result<(), Error> {
     env_logger::init();
@@ -58,12 +52,9 @@ fn main() -> Result<(), Error> {
         Pixels::new(CHIP8_WIDTH as u32, CHIP8_HEIGHT as u32, surface_texture).unwrap()
     };
 
-    let mut chip8 = Chip8::new(pixels)
+    let mut chip8 = Interpreter::new(pixels)
         .load_binary(binary)
         .unwrap_or_else(|_| panic!("Could not load binary {}", binary));
-
-    let instruction_duty_cycle = chip8.time_per_insn();
-    let mut sleeper = Sleeper::new(instruction_duty_cycle);
 
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();
@@ -112,6 +103,5 @@ fn main() -> Result<(), Error> {
             _ => (),
         }
         chip8.step();
-        sleeper.sleep();
     });
 }
