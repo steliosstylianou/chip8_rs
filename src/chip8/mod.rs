@@ -38,7 +38,7 @@ pub struct Interpreter {
     hz: u32,
     timer: Instant,
     sleeper: Sleeper,
-    sound_stream: OutputStream,
+    _sound_stream: OutputStream,
     sound_sink: Sink,
 }
 
@@ -88,24 +88,7 @@ use Instruction::*;
 
 impl Interpreter {
     pub fn new(pixels: Pixels) -> Interpreter {
-        let keyboard_map = HashMap::from([
-            (VirtualKeyCode::Key1, 1),
-            (VirtualKeyCode::Key2, 2),
-            (VirtualKeyCode::Key3, 3),
-            (VirtualKeyCode::Key4, 0xC),
-            (VirtualKeyCode::Q, 4),
-            (VirtualKeyCode::W, 5),
-            (VirtualKeyCode::E, 6),
-            (VirtualKeyCode::R, 0xD),
-            (VirtualKeyCode::A, 7),
-            (VirtualKeyCode::S, 8),
-            (VirtualKeyCode::D, 9),
-            (VirtualKeyCode::F, 0xE),
-            (VirtualKeyCode::Z, 0xA),
-            (VirtualKeyCode::X, 0x0),
-            (VirtualKeyCode::C, 0xB),
-            (VirtualKeyCode::V, 0xF),
-        ]);
+        let keyboard_map = HashMap::from(CHIP8_KEYBOARD_MAP);
         let (stream, stream_handle) = OutputStream::try_default().unwrap();
         let sink = Sink::try_new(&stream_handle).unwrap();
         let source = SineWave::new(CHIP8_BEEP_FREQUENCY);
@@ -130,32 +113,14 @@ impl Interpreter {
             timer: Instant::now(),
             sleeper: Sleeper::new().with_frequency(CHIP8_SPEED_HZ),
             sound_sink: sink,
-            sound_stream: stream
+            _sound_stream: stream,
         };
         chip.load_fonts();
         chip
     }
 
     fn load_fonts(&mut self) {
-        let fonts = [
-            // 0, (use u8 in suffix to make compiler set type to u8 array instead of u32)
-            0xF0u8, 0x90, 0x90, 0x90, 0xF0, // 1,
-            0x20, 0x60, 0x20, 0x20, 0x70, // 2,
-            0xF0, 0x10, 0xF0, 0x80, 0xF0, // 3,
-            0xF0, 0x10, 0xF0, 0x10, 0xF0, // 4,
-            0x90, 0x90, 0xF0, 0x10, 0x10, // 5,
-            0xF0, 0x80, 0xF0, 0x10, 0xF0, // 6,
-            0xF0, 0x80, 0xF0, 0x90, 0xF0, // 7,
-            0xF0, 0x10, 0x20, 0x40, 0x40, // 8,
-            0xF0, 0x90, 0xF0, 0x90, 0xF0, // 9,
-            0xF0, 0x90, 0xF0, 0x10, 0xF0, // A,
-            0xF0, 0x90, 0xF0, 0x90, 0x90, // B,
-            0xE0, 0x90, 0xE0, 0x90, 0xE0, // C,
-            0xF0, 0x80, 0x80, 0x80, 0xF0, // D,
-            0xE0, 0x90, 0x90, 0x90, 0xE0, // E,
-            0xF0, 0x80, 0xF0, 0x80, 0xF0, // F,
-            0xF0, 0x80, 0xF0, 0x80, 0x80,
-        ];
+        let fonts = CHIP8_FONT;
         self.memory[0..fonts.len()].copy_from_slice(&fonts);
     }
 
