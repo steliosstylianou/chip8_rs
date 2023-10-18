@@ -2,6 +2,9 @@ use log::{debug, trace};
 use std::thread;
 use std::time::{Duration, Instant};
 
+// Use a helper class for accumulating delay values until they reach a certain threshold.
+// This way we can compensate for the inaccuracies of sleep() for low values (< 1ms).
+// We can also compensate for when the VM runs too slow, by reducing throttling.
 pub struct Sleeper {
     sleep_duty_cycle: Duration,
     sleep_threshold: Duration,
@@ -20,8 +23,8 @@ impl Sleeper {
     }
 
     pub fn sleep(&mut self) {
-        trace!("Current sleep debt {:?}", self.sleep_debt);
         let elapsed = self.sleep_timer.elapsed();
+        trace!("Current sleep debt {:?}", self.sleep_debt);
         if let Some(result) =  self.sleep_duty_cycle.checked_sub(elapsed) {
             // We were too fast, so throttle!
             self.sleep_debt += result;
